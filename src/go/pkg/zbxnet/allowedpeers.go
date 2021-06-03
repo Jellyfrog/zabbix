@@ -22,13 +22,22 @@ package zbxnet
 import (
 	"net"
 	"strings"
+	"time"
+
+	"zabbix.com/internal/agent"
 )
+
+type NameCache struct {
+	ttl time.Time
+	ips []string
+}
 
 // AllowedPeers is preparsed content of field Server
 type AllowedPeers struct {
-	ips   []net.IP
-	nets  []*net.IPNet
-	names []string
+	ips   	   []net.IP
+	nets  	   []*net.IPNet
+	names 	   []string
+	namesCache map[string]*NameCache
 }
 
 // GetAllowedPeers is parses the Server field
@@ -71,15 +80,8 @@ func (ap *AllowedPeers) CheckPeer(ip net.IP) bool {
 		return true
 	}
 
-	for _, nameAllowed := range ap.names {
-		if ips, err := net.LookupHost(nameAllowed); nil == err {
-			for _, ipPeer := range ips {
-				ipAllowed := net.ParseIP(ipPeer)
-				if ipAllowed.Equal(ip) {
-					return true
-				}
-			}
-		}
+	if ap.checkNetName(ip) {
+		return true
 	}
 
 	return false
@@ -122,4 +124,38 @@ func (ap *AllowedPeers) checkNetIP(ip net.IP) bool {
 		}
 	}
 	return false
+}
+
+func (ap *AllowedPeers) checkNetName(ip net.IP) bool {
+	for _, nameAllowed := range ap.names {
+		if ips, err := ap.lookupHost(nameAllowed); nil == err {
+			for _, ipPeer := range ips {
+				ipAllowed := net.ParseIP(ipPeer)
+				if ipAllowed.Equal(ip) {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+func (ap *AllowedPeers) lookupHost(name string) ([]string, error) {
+	var err error
+
+	if ap.namesCache == nil {
+		ap.namesCache = make(map[string]*NameCache)
+
+	}
+	c := ap.namesCache[name]
+	if c == nil {
+		c = &NameCache{}
+		ap.namesCache[name] = c
+	}
+	// If TTL expired
+	if c.ttl.Before(time.Now()) {
+		c.ips, err = net.LookupHost(name)
+		c.ttl = time.Now().Add(time.Duration(agent.Options.ServerCache) * time.Second)
+	}
+	return c.ips, err
 }

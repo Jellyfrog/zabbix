@@ -46,6 +46,7 @@ type AgentOptions struct {
 	StatusPort             int      `conf:"optional,range=1024:32767"`
 	SourceIP               string   `conf:"optional"`
 	Server                 string   `conf:"optional"`
+	ServerCache            int      `conf:"optional,range=1:31536000,default=120"`
 	UserParameter          []string `conf:"optional"`
 	UnsafeUserParameters   int      `conf:"optional,range=0:1,default=0"`
 	UserParameterDir       string   `conf:"optional"`
